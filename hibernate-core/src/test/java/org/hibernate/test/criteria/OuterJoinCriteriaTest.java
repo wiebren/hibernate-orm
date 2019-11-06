@@ -6,22 +6,6 @@
  */
 package org.hibernate.test.criteria;
 
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
-import org.junit.Test;
-
-import org.hibernate.Criteria;
-import org.hibernate.FetchMode;
-import org.hibernate.Session;
-import org.hibernate.criterion.CriteriaSpecification;
-import org.hibernate.criterion.Restrictions;
-import org.hibernate.sql.JoinFragment;
-import org.hibernate.sql.JoinType;
-import org.hibernate.testing.TestForIssue;
-import org.hibernate.testing.junit4.BaseCoreFunctionalTestCase;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
@@ -29,6 +13,19 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import org.hibernate.Criteria;
+import org.hibernate.Session;
+import org.hibernate.criterion.Restrictions;
+import org.hibernate.sql.JoinFragment;
+import org.hibernate.sql.JoinType;
+import org.hibernate.testing.TestForIssue;
+import org.hibernate.testing.junit4.BaseCoreFunctionalTestCase;
+import org.junit.Test;
 
 /**
  * @author Mattias Jiderhamn
@@ -42,6 +39,41 @@ public class OuterJoinCriteriaTest extends BaseCoreFunctionalTestCase {
 	@Override
 	public String[] getMappings() {
 		return new String[] { "criteria/Order.hbm.xml" };
+	}
+
+	@Test
+	public void testAliasWithWhereClauseOnElementCollection() {
+		// Setup
+		Session s = openSession();
+		s.getTransaction().begin();
+		ElementCollectionTestObject object1 = new ElementCollectionTestObject();
+		object1.setValues("a", "b");
+		s.persist(object1);
+
+		ElementCollectionTestObject object2 = new ElementCollectionTestObject();
+		object2.setValues("a", "c");
+		s.persist(object2);
+
+		s.getTransaction().commit();
+
+		// Actual testt
+		s.getTransaction().begin();
+
+		Criteria rootCriteria = s.createCriteria( ElementCollectionTestObject.class );
+		// create alias, ensuring we stay on the root criteria
+		assertSame( rootCriteria, rootCriteria.createAlias( "values", "ol", JoinFragment.LEFT_OUTER_JOIN,  Restrictions.eq("ol.elements", "b")));
+
+		// Only objects that have no match
+		rootCriteria.add(Restrictions.isNull("ol.elements"));
+
+		List objects = rootCriteria.list();
+
+		// object2 should be returned because it does not have value == "b"
+		assertEquals( 1, objects.size() );
+		ElementCollectionTestObject o = (ElementCollectionTestObject) objects.get(0);
+		assertEquals( object2.getId(), o.getId() );
+		s.getTransaction().commit();
+		s.close();
 	}
 
 	@Test
@@ -624,5 +656,10 @@ public class OuterJoinCriteriaTest extends BaseCoreFunctionalTestCase {
 
 	private static boolean isBlank(String s) {
 		return s == null || s.trim().length() == 0;
+	}
+
+	@Override
+	protected Class<?>[] getAnnotatedClasses() {
+		return new Class[] {ElementCollectionTestObject.class};
 	}
 }
